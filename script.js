@@ -18,10 +18,28 @@ const successMessage = document.getElementById('successMessage');
 const uploadTitle = document.getElementById('uploadTitle');
 const mdModeBtn = document.getElementById('mdModeBtn');
 const pdfModeBtn = document.getElementById('pdfModeBtn');
+const progressFill = document.getElementById('progressFill');
+const progressPercent = document.getElementById('progressPercent');
+const loadingText = document.getElementById('loadingText');
+const loadingTip = document.getElementById('loadingTip');
+const themeToggle = document.getElementById('themeToggle');
 
 let currentFile = null;
 let markdownContent = '';
-let currentMode = 'md'; // 'md' or 'pdf'
+let currentMode = 'md';
+
+// Theme Toggle
+themeToggle.addEventListener('change', () => {
+    document.body.classList.toggle('dark-mode');
+    localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+});
+
+// Load saved theme
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+    themeToggle.checked = true;
+} // 'md' or 'pdf'
 
 // Load configuration
 const CONVERTAPI_SECRET = CONFIG?.convertAPI?.secret || '5x4j8g7KaYLKjj5LbzpqIa2oe48ipgjk';
@@ -220,13 +238,24 @@ async function convertToWord() {
     loading.style.display = 'block';
     actionSection.style.display = 'none';
     successMessage.style.display = 'none';
+    
+    // Reset progress
+    updateProgress(0, 'Initializing conversion...');
 
     try {
+        // Simulate progress for better UX
+        updateProgress(10, 'Preparing file...');
+        
         if (currentMode === 'md') {
             await convertMarkdownToWord();
         } else {
             await convertPDFToWord();
         }
+        
+        updateProgress(100, 'Conversion complete!');
+        
+        // Small delay to show 100%
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         loading.style.display = 'none';
         successMessage.style.display = 'block';
@@ -244,10 +273,30 @@ async function convertToWord() {
     }
 }
 
+// Update progress bar with requestAnimationFrame for smoother updates
+function updateProgress(percent, text = null, tip = null) {
+    requestAnimationFrame(() => {
+        progressFill.style.width = percent + '%';
+        progressPercent.textContent = percent + '%';
+        
+        if (text) {
+            loadingText.textContent = text;
+        }
+        
+        if (tip) {
+            loadingTip.textContent = tip;
+        }
+    });
+}
+
 // Convert Markdown to Word
 async function convertMarkdownToWord() {
+    updateProgress(20, 'Parsing markdown...');
+    
     // Parse markdown to HTML
     const html = marked.parse(markdownContent);
+    
+    updateProgress(50, 'Generating Word document...');
     
     // Create a complete HTML document for Word conversion
     const htmlContent = `
@@ -368,8 +417,12 @@ ${html}
 </body>
 </html>`;
 
+    updateProgress(70, 'Converting to DOCX format...');
+
     // Convert HTML to Word document
     const converted = htmlDocx.asBlob(htmlContent);
+    
+    updateProgress(90, 'Preparing download...');
     
     // Save the document
     const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
@@ -394,12 +447,14 @@ async function convertPDFToWordWithAPI() {
         reader.onload = async (e) => {
             try {
                 // Update loading message
-                loading.querySelector('p').textContent = 'Converting with Premium API... This may take a moment.';
+                updateProgress(15, 'Uploading to Premium API...', 'Using high-quality conversion service');
                 
                 // Prepare form data for upload
                 const formData = new FormData();
                 formData.append('File', currentFile);
                 formData.append('StoreFile', 'true');
+                
+                updateProgress(30, 'Processing PDF...', 'Extracting content and formatting');
                 
                 // Call ConvertAPI with correct endpoint format
                 const apiUrl = `https://v2.convertapi.com/convert/pdf/to/docx?Secret=${CONVERTAPI_SECRET}`;
@@ -409,6 +464,8 @@ async function convertPDFToWordWithAPI() {
                     body: formData
                 });
                 
+                updateProgress(60, 'Converting to Word format...', 'Preserving layout and images');
+                
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('API Error Response:', errorText);
@@ -417,13 +474,19 @@ async function convertPDFToWordWithAPI() {
                 
                 const result = await response.json();
                 
+                updateProgress(80, 'Finalizing document...');
+                
                 // Download the converted file
                 if (result.Files && result.Files.length > 0) {
                     const fileUrl = result.Files[0].Url;
                     
+                    updateProgress(90, 'Downloading converted file...');
+                    
                     // Fetch the converted file
                     const fileResponse = await fetch(fileUrl);
                     const blob = await fileResponse.blob();
+                    
+                    updateProgress(95, 'Preparing download...');
                     
                     // Save the file
                     const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
@@ -447,7 +510,7 @@ async function convertPDFToWordWithAPI() {
                 );
                 
                 if (useClientSide) {
-                    loading.querySelector('p').textContent = 'Converting your file...';
+                    updateProgress(20, 'Switching to basic conversion...');
                     await convertPDFToWordClientSide();
                     resolve();
                 } else {
@@ -468,11 +531,18 @@ async function convertPDFToWordClientSide() {
     return new Promise((resolve, reject) => {
         reader.onload = async (e) => {
             try {
+                updateProgress(20, 'Loading PDF...', 'Reading file contents');
+                
                 const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
                 let fullHTML = '';
                 
+                const totalPages = pdf.numPages;
+                
                 // Extract text from all pages with better formatting
-                for (let i = 1; i <= pdf.numPages; i++) {
+                for (let i = 1; i <= totalPages; i++) {
+                    const pageProgress = 20 + Math.floor((i / totalPages) * 50);
+                    updateProgress(pageProgress, `Processing page ${i} of ${totalPages}...`);
+                    
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
                     const viewport = page.getViewport({ scale: 1.0 });
@@ -551,6 +621,8 @@ async function convertPDFToWordClientSide() {
                     fullHTML += `</div>`;
                 }
                 
+                updateProgress(75, 'Creating Word document...', 'Formatting content');
+                
                 // Create enhanced HTML document
                 const htmlContent = `
 <!DOCTYPE html>
@@ -615,8 +687,12 @@ async function convertPDFToWordClientSide() {
 </body>
 </html>`;
 
+                updateProgress(85, 'Converting to DOCX format...');
+
                 // Convert to Word with better quality
                 const converted = htmlDocx.asBlob(htmlContent);
+                
+                updateProgress(95, 'Preparing download...');
                 
                 // Save the document
                 const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
