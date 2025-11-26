@@ -39,7 +39,7 @@ const savedTheme = localStorage.getItem('theme');
 if (savedTheme === 'dark') {
     document.body.classList.add('dark-mode');
     themeToggle.checked = true;
-} // 'md' or 'pdf'
+}
 
 // Load configuration
 const CONVERTAPI_SECRET = CONFIG?.convertAPI?.secret || '5x4j8g7KaYLKjj5LbzpqIa2oe48ipgjk';
@@ -93,11 +93,14 @@ function switchMode(mode) {
         pdfModeBtn.classList.remove('active');
         fileInput.setAttribute('accept', '.md,.markdown,.txt');
         uploadTitle.textContent = 'Drop your Markdown file here';
+        ocrOption.style.display = 'none';
+        ocrToggle.checked = false;
     } else {
         pdfModeBtn.classList.add('active');
         mdModeBtn.classList.remove('active');
         fileInput.setAttribute('accept', '.pdf');
         uploadTitle.textContent = 'Drop your PDF file here';
+        ocrOption.style.display = 'block';
     }
     
     // Reset if file was already uploaded
@@ -454,7 +457,13 @@ async function convertPDFToWordWithAPI() {
                 formData.append('File', currentFile);
                 formData.append('StoreFile', 'true');
                 
-                updateProgress(30, 'Processing PDF...', 'Extracting content and formatting');
+                // Add OCR parameter if enabled
+                if (ocrToggle.checked) {
+                    formData.append('OCR', 'true');
+                    updateProgress(20, 'OCR enabled - Processing scanned document...', 'Extracting text from images');
+                } else {
+                    updateProgress(30, 'Processing PDF...', 'Extracting content and formatting');
+                }
                 
                 // Call ConvertAPI with correct endpoint format
                 const apiUrl = `https://v2.convertapi.com/convert/pdf/to/docx?Secret=${CONVERTAPI_SECRET}`;
@@ -490,7 +499,8 @@ async function convertPDFToWordWithAPI() {
                     
                     // Save the file
                     const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
-                    saveAs(blob, `${originalName}_premium.docx`);
+                    const suffix = ocrToggle.checked ? '_ocr' : '_premium';
+                    saveAs(blob, `${originalName}${suffix}.docx`);
                     
                     resolve();
                 } else {
