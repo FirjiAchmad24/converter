@@ -1,0 +1,15 @@
+{
+  "name": "premium-file-converter",
+  "version": "1.0.0",
+  "description": "Premium File Converter - MD & PDF to Word",
+  "author": "Firji Achmad Fahresi",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

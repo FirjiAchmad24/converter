@@ -12,16 +12,29 @@
         <header>
             <div class="logo">
                 <i class="fas fa-file-word"></i>
-                <h1>MD to Word Converter</h1>
+                <h1>Premium File Converter</h1>
             </div>
-            <p class="subtitle">Convert your Markdown files to Word documents instantly</p>
+            <p class="subtitle">Convert your Markdown & PDF files to Word documents instantly</p>
         </header>
 
         <main>
+            <!-- Converter Mode Selection -->
+            <div class="mode-selection">
+                <button class="mode-btn active" id="mdModeBtn" data-mode="md">
+                    <i class="fas fa-markdown"></i>
+                    <span>MD to Word</span>
+                </button>
+                <button class="mode-btn" id="pdfModeBtn" data-mode="pdf">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>PDF to Word</span>
+                    <small class="premium-badge"><i class="fas fa-crown"></i> Premium API</small>
+                </button>
+            </div>
+
             <div class="upload-section">
                 <div class="upload-area" id="uploadArea">
                     <i class="fas fa-cloud-upload-alt"></i>
-                    <h2>Drop your Markdown file here</h2>
+                    <h2 id="uploadTitle">Drop your Markdown file here</h2>
                     <p>or click to browse</p>
                     <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
                     <button class="btn-browse" id="browseBtn">
@@ -77,11 +90,17 @@
     </div>
 
     <!-- Scripts -->
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Set PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <script src="script.js"></script>
 </body>
 </html>

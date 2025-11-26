@@ -12,9 +12,17 @@ const convertBtn = document.getElementById('convertBtn');
 const resetBtn = document.getElementById('resetBtn');
 const loading = document.getElementById('loading');
 const successMessage = document.getElementById('successMessage');
+const uploadTitle = document.getElementById('uploadTitle');
+const mdModeBtn = document.getElementById('mdModeBtn');
+const pdfModeBtn = document.getElementById('pdfModeBtn');
 
 let currentFile = null;
 let markdownContent = '';
+let currentMode = 'md'; // 'md' or 'pdf'
+
+// Load configuration
+const CONVERTAPI_SECRET = typeof CONFIG !== 'undefined' ? CONFIG.convertAPI.secret : 'your_api_key_here';
+const USE_API_CONVERSION = typeof CONFIG !== 'undefined' ? CONFIG.convertAPI.enabled : true;
 
 // Event Listeners
 browseBtn.addEventListener('click', () => fileInput.click());
@@ -24,6 +32,10 @@ uploadArea.addEventListener('click', (e) => {
         fileInput.click();
     }
 });
+
+// Mode selection
+mdModeBtn.addEventListener('click', () => switchMode('md'));
+pdfModeBtn.addEventListener('click', () => switchMode('pdf'));
 
 // Drag and Drop
 uploadArea.addEventListener('dragover', (e) => {
@@ -50,6 +62,29 @@ convertBtn.addEventListener('click', convertToWord);
 // Reset button
 resetBtn.addEventListener('click', resetAll);
 
+// Switch between MD and PDF mode
+function switchMode(mode) {
+    currentMode = mode;
+    
+    // Update button states
+    if (mode === 'md') {
+        mdModeBtn.classList.add('active');
+        pdfModeBtn.classList.remove('active');
+        fileInput.setAttribute('accept', '.md,.markdown,.txt');
+        uploadTitle.textContent = 'Drop your Markdown file here';
+    } else {
+        pdfModeBtn.classList.add('active');
+        mdModeBtn.classList.remove('active');
+        fileInput.setAttribute('accept', '.pdf');
+        uploadTitle.textContent = 'Drop your PDF file here';
+    }
+    
+    // Reset if file was already uploaded
+    if (currentFile) {
+        resetAll();
+    }
+}
+
 // Handle file selection
 function handleFileSelect(e) {
     const file = e.target.files[0];
@@ -60,6 +95,15 @@ function handleFileSelect(e) {
 
 // Handle file
 function handleFile(file) {
+    if (currentMode === 'md') {
+        handleMarkdownFile(file);
+    } else {
+        handlePDFFile(file);
+    }
+}
+
+// Handle Markdown file
+function handleMarkdownFile(file) {
     // Check if file is markdown
     const validExtensions = ['.md', '.markdown', '.txt'];
     const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
@@ -81,15 +125,48 @@ function handleFile(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         markdownContent = e.target.result;
-        displayPreview(markdownContent);
+        displayMarkdownPreview(markdownContent);
         actionSection.style.display = 'block';
         uploadArea.style.display = 'none';
     };
     reader.readAsText(file);
 }
 
+// Handle PDF file
+function handlePDFFile(file) {
+    // Check if file is PDF
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    
+    if (fileExtension !== '.pdf') {
+        alert('Please upload a valid PDF file');
+        return;
+    }
+
+    currentFile = file;
+    
+    // Display file info
+    fileName.textContent = file.name;
+    const sizeInKB = (file.size / 1024).toFixed(2);
+    fileSize.textContent = `Size: ${sizeInKB} KB`;
+    fileInfo.style.display = 'block';
+    
+    // Read and preview PDF
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            await displayPDFPreview(e.target.result);
+            actionSection.style.display = 'block';
+            uploadArea.style.display = 'none';
+        } catch (error) {
+            console.error('PDF preview error:', error);
+            alert('Error loading PDF preview');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
 // Display markdown preview
-function displayPreview(markdown) {
+function displayMarkdownPreview(markdown) {
     const html = marked.parse(markdown);
     previewContent.innerHTML = html;
     
@@ -101,6 +178,40 @@ function displayPreview(markdown) {
     previewSection.style.display = 'block';
 }
 
+// Display PDF preview
+async function displayPDFPreview(arrayBuffer) {
+    try {
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        
+        const scale = 1.5;
+        const viewport = page.getViewport({ scale });
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+        
+        previewContent.innerHTML = `
+            <div style="text-align: center;">
+                <p style="margin-bottom: 15px; color: #6b7280;">Preview (Page 1 of ${pdf.numPages})</p>
+                <img src="${canvas.toDataURL()}" style="max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+                ${pdf.numPages > 1 ? `<p style="margin-top: 15px; color: #6b7280; font-style: italic;">+ ${pdf.numPages - 1} more pages</p>` : ''}
+            </div>
+        `;
+        
+        previewSection.style.display = 'block';
+    } catch (error) {
+        console.error('PDF preview error:', error);
+        throw error;
+    }
+}
+
 // Convert to Word
 async function convertToWord() {
     loading.style.display = 'block';
@@ -108,11 +219,35 @@ async function convertToWord() {
     successMessage.style.display = 'none';
 
     try {
-        // Parse markdown to HTML
-        const html = marked.parse(markdownContent);
+        if (currentMode === 'md') {
+            await convertMarkdownToWord();
+        } else {
+            await convertPDFToWord();
+        }
         
-        // Create a complete HTML document for Word conversion
-        const htmlContent = `
+        loading.style.display = 'none';
+        successMessage.style.display = 'block';
+        
+        setTimeout(() => {
+            successMessage.style.display = 'none';
+            actionSection.style.display = 'block';
+        }, 3000);
+        
+    } catch (error) {
+        console.error('Conversion error:', error);
+        loading.style.display = 'none';
+        alert('An error occurred during conversion. Please try again.');
+        actionSection.style.display = 'block';
+    }
+}
+
+// Convert Markdown to Word
+async function convertMarkdownToWord() {
+    // Parse markdown to HTML
+    const html = marked.parse(markdownContent);
+    
+    // Create a complete HTML document for Word conversion
+    const htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -230,27 +365,269 @@ ${html}
 </body>
 </html>`;
 
-        // Convert HTML to Word document
-        const converted = htmlDocx.asBlob(htmlContent);
-        
-        // Save the document
-        const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
-        saveAs(converted, `${originalName}.docx`);
-        
-        loading.style.display = 'none';
-        successMessage.style.display = 'block';
-        
-        setTimeout(() => {
-            successMessage.style.display = 'none';
-            actionSection.style.display = 'block';
-        }, 3000);
-        
-    } catch (error) {
-        console.error('Conversion error:', error);
-        loading.style.display = 'none';
-        alert('An error occurred during conversion. Please try again.');
-        actionSection.style.display = 'block';
+    // Convert HTML to Word document
+    const converted = htmlDocx.asBlob(htmlContent);
+    
+    // Save the document
+    const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
+    saveAs(converted, `${originalName}.docx`);
+}
+
+// Convert PDF to Word
+async function convertPDFToWord() {
+    // Check if API conversion is enabled and API key is set
+    if (USE_API_CONVERSION && CONVERTAPI_SECRET !== 'your_api_key_here') {
+        await convertPDFToWordWithAPI();
+    } else {
+        await convertPDFToWordClientSide();
     }
+}
+
+// Convert PDF to Word using ConvertAPI (Premium Quality)
+async function convertPDFToWordWithAPI() {
+    const reader = new FileReader();
+    
+    return new Promise((resolve, reject) => {
+        reader.onload = async (e) => {
+            try {
+                // Update loading message
+                loading.querySelector('p').textContent = 'Converting with Premium API... This may take a moment.';
+                
+                // Prepare form data for upload
+                const formData = new FormData();
+                formData.append('File', currentFile);
+                formData.append('StoreFile', 'true');
+                
+                // Call ConvertAPI with correct endpoint format
+                const apiUrl = `https://v2.convertapi.com/convert/pdf/to/docx?Secret=${CONVERTAPI_SECRET}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API Error Response:', errorText);
+                    throw new Error(`API returned ${response.status}: ${errorText}`);
+                }
+                
+                const result = await response.json();
+                
+                // Download the converted file
+                if (result.Files && result.Files.length > 0) {
+                    const fileUrl = result.Files[0].Url;
+                    
+                    // Fetch the converted file
+                    const fileResponse = await fetch(fileUrl);
+                    const blob = await fileResponse.blob();
+                    
+                    // Save the file
+                    const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
+                    saveAs(blob, `${originalName}_premium.docx`);
+                    
+                    resolve();
+                } else {
+                    throw new Error('No converted file received from API');
+                }
+                
+            } catch (error) {
+                console.error('API Conversion error:', error);
+                
+                // Show error message with option to try client-side
+                const useClientSide = confirm(
+                    'Premium API conversion failed. This might be due to:\n' +
+                    '- Invalid or missing API key\n' +
+                    '- API quota exceeded\n' +
+                    '- Network issues\n\n' +
+                    'Would you like to try basic client-side conversion instead?'
+                );
+                
+                if (useClientSide) {
+                    loading.querySelector('p').textContent = 'Converting your file...';
+                    await convertPDFToWordClientSide();
+                    resolve();
+                } else {
+                    reject(error);
+                }
+            }
+        };
+        
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(currentFile);
+    });
+}
+
+// Convert PDF to Word Client-Side (Basic Quality)
+async function convertPDFToWordClientSide() {
+    const reader = new FileReader();
+    
+    return new Promise((resolve, reject) => {
+        reader.onload = async (e) => {
+            try {
+                const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
+                let fullHTML = '';
+                
+                // Extract text from all pages with better formatting
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const viewport = page.getViewport({ scale: 1.0 });
+                    
+                    // Group text items by vertical position (lines)
+                    const lines = [];
+                    let currentLine = { items: [], y: null };
+                    
+                    textContent.items.forEach(item => {
+                        const y = Math.round(item.transform[5]);
+                        
+                        if (currentLine.y === null || Math.abs(y - currentLine.y) < 5) {
+                            currentLine.items.push(item);
+                            currentLine.y = y;
+                        } else {
+                            if (currentLine.items.length > 0) {
+                                lines.push(currentLine);
+                            }
+                            currentLine = { items: [item], y: y };
+                        }
+                    });
+                    
+                    if (currentLine.items.length > 0) {
+                        lines.push(currentLine);
+                    }
+                    
+                    // Sort lines by Y position (top to bottom)
+                    lines.sort((a, b) => b.y - a.y);
+                    
+                    // Add page break
+                    if (i > 1) {
+                        fullHTML += '<div style="page-break-before: always;"></div>';
+                    }
+                    
+                    fullHTML += `<div class="pdf-page">`;
+                    fullHTML += `<h2 style="color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 8px; margin-top: 30px; margin-bottom: 15px;">Page ${i}</h2>`;
+                    
+                    // Process each line
+                    lines.forEach(line => {
+                        // Sort items in line by X position (left to right)
+                        line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+                        
+                        let lineText = '';
+                        let maxFontSize = 0;
+                        let isBold = false;
+                        
+                        line.items.forEach(item => {
+                            const fontSize = item.transform[0];
+                            maxFontSize = Math.max(maxFontSize, fontSize);
+                            
+                            // Detect bold (font name contains "Bold")
+                            if (item.fontName && item.fontName.includes('Bold')) {
+                                isBold = true;
+                            }
+                            
+                            lineText += item.str;
+                        });
+                        
+                        lineText = lineText.trim();
+                        
+                        if (lineText) {
+                            // Detect headings based on font size
+                            if (maxFontSize > 16) {
+                                fullHTML += `<h3 style="font-size: ${Math.min(maxFontSize, 24)}px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;">${lineText}</h3>`;
+                            } else if (maxFontSize > 14 || isBold) {
+                                fullHTML += `<h4 style="font-size: ${maxFontSize}px; font-weight: bold; margin-top: 15px; margin-bottom: 8px;">${lineText}</h4>`;
+                            } else if (lineText.match(/^[\d\.\)\-\*]\s/)) {
+                                // Detect bullet points or numbered lists
+                                fullHTML += `<p style="margin-left: 20px; margin-bottom: 8px;">${lineText}</p>`;
+                            } else {
+                                fullHTML += `<p style="margin-bottom: 10px; text-align: justify; line-height: 1.6;">${lineText}</p>`;
+                            }
+                        }
+                    });
+                    
+                    fullHTML += `</div>`;
+                }
+                
+                // Create enhanced HTML document
+                const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Calibri', 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #000000;
+            max-width: 850px;
+            margin: 40px auto;
+            padding: 30px;
+        }
+        .pdf-page {
+            margin-bottom: 40px;
+        }
+        h2 {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4f46e5;
+            border-bottom: 2px solid #4f46e5;
+            padding-bottom: 8px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        h3 {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #1f2937;
+        }
+        h4 {
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 15px;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        p {
+            margin-bottom: 10px;
+            text-align: justify;
+            line-height: 1.6;
+        }
+        strong {
+            font-weight: bold;
+        }
+        em {
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #4f46e5; font-size: 28px; margin-bottom: 10px; border-bottom: 3px solid #4f46e5; padding-bottom: 15px;">Converted from PDF</h1>
+    <p style="text-align: center; color: #6b7280; margin-bottom: 30px; font-style: italic;">High-Quality Conversion by Premium Converter</p>
+    ${fullHTML}
+    <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 12px;">
+        <p>Converted with Premium File Converter - Created by Firji Achmad Fahresi</p>
+    </div>
+</body>
+</html>`;
+
+                // Convert to Word with better quality
+                const converted = htmlDocx.asBlob(htmlContent);
+                
+                // Save the document
+                const originalName = currentFile.name.replace(/\.[^/.]+$/, '');
+                saveAs(converted, `${originalName}_converted.docx`);
+                
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(currentFile);
+    });
 }
 
 // Reset all
