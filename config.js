@@ -7,15 +7,23 @@
 // Get your FREE API key from: https://www.convertapi.com/a/signup
 // Free tier includes: 250 conversions per month (no credit card required)
 
+// Get API key from environment variable (for Vercel deployment)
+const getApiKey = () => {
+    // Try Vite environment variable first
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        return import.meta.env.VITE_CONVERTAPI_SECRET;
+    }
+    // Fallback for development
+    return '5x4j8g7KaYLKjj5LbzpqIa2oe48ipgjk';
+};
+
 const CONFIG = {
     // ConvertAPI Settings
     convertAPI: {
         // API key is loaded from environment variable for security
         // In Vercel: Add VITE_CONVERTAPI_SECRET in Environment Variables
         // Locally: Create .env.local file with VITE_CONVERTAPI_SECRET
-        secret: import.meta.env?.VITE_CONVERTAPI_SECRET || 
-                (typeof process !== 'undefined' && process.env?.VITE_CONVERTAPI_SECRET) || 
-                '5x4j8g7KaYLKjj5LbzpqIa2oe48ipgjk', // Fallback (will be removed in production)
+        secret: getApiKey(),
         
         // Enable/disable API conversion
         // Set to false to use client-side conversion (lower quality but no API needed)
@@ -56,6 +64,9 @@ const CONFIG = {
 // 8. You now have 250 FREE premium conversions per month!
 
 // Export configuration
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = CONFIG;
+export default CONFIG;
+
+// Also expose globally for non-module scripts
+if (typeof window !== 'undefined') {
+    window.CONFIG = CONFIG;
 }

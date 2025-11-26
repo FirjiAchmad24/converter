@@ -1,3 +1,6 @@
+// Import configuration
+import CONFIG from './config.js';
+
 // Element references
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
@@ -21,8 +24,8 @@ let markdownContent = '';
 let currentMode = 'md'; // 'md' or 'pdf'
 
 // Load configuration
-const CONVERTAPI_SECRET = typeof CONFIG !== 'undefined' ? CONFIG.convertAPI.secret : 'your_api_key_here';
-const USE_API_CONVERSION = typeof CONFIG !== 'undefined' ? CONFIG.convertAPI.enabled : true;
+const CONVERTAPI_SECRET = CONFIG?.convertAPI?.secret || '5x4j8g7KaYLKjj5LbzpqIa2oe48ipgjk';
+const USE_API_CONVERSION = CONFIG?.convertAPI?.enabled || true;
 
 // Event Listeners
 browseBtn.addEventListener('click', () => fileInput.click());
